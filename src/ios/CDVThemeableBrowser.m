@@ -41,7 +41,10 @@
 #define    kThemeableBrowserPropWwwImagePressed @"wwwImagePressed"
 #define    kThemeableBrowserPropWwwImageDensity @"wwwImageDensity"
 #define    kThemeableBrowserPropStaticText @"staticText"
+#define    kThemeableBrowserPropShowProgress @"showProgress"
 #define    kThemeableBrowserPropShowPageTitle @"showPageTitle"
+#define    kThemeableBrowserPropProgressBgColor @"progressBgColor"
+#define    kThemeableBrowserPropProgressColor @"progressColor"
 #define    kThemeableBrowserPropAlign @"align"
 #define    kThemeableBrowserPropTitle @"title"
 #define    kThemeableBrowserPropCancel @"cancel"
@@ -58,6 +61,12 @@
 #define    TOOLBAR_DEF_HEIGHT 44.0
 #define    LOCATIONBAR_HEIGHT 21.0
 #define    FOOTER_HEIGHT ((TOOLBAR_HEIGHT) + (LOCATIONBAR_HEIGHT))
+
+NSString *completeRPCURLPath = @"/webviewprogressproxy/complete";
+
+const float MyInitialProgressValue = 0.1f;
+const float MyInteractiveProgressValue = 0.5f;
+const float MyFinalProgressValue = 0.9f;
 
 #pragma mark CDVThemeableBrowser
 
@@ -307,7 +316,7 @@
 
 - (void)show:(CDVInvokedUrlCommand*)command
 {
-    [self show:command withAnimation:YES];
+    [self show:command withAnimation:NO];
 }
 
 - (void)show:(CDVInvokedUrlCommand*)command withAnimation:(BOOL)animated
@@ -339,7 +348,7 @@
             [tmpWindow setWindowLevel:UIWindowLevelNormal];
             
             [tmpWindow makeKeyAndVisible];
-            [tmpController presentViewController:nav animated:YES completion:nil];
+            [tmpController presentViewController:nav animated:NO completion:nil];
         }
     });
 }
@@ -357,7 +366,7 @@
     }
     */
     if (self.themeableBrowserViewController != nil) {
-        [[self.themeableBrowserViewController presentingViewController] dismissViewControllerAnimated:YES completion:nil];
+        [[self.themeableBrowserViewController presentingViewController] dismissViewControllerAnimated:NO completion:nil];
         _isShown = NO;
         /*_previousStatusBarStyle = -1;*/
     }
@@ -689,6 +698,20 @@
 
 #pragma mark CDVThemeableBrowserViewController
 
+@interface CDVThemeableBrowserViewController ()
+{
+    NSUInteger loadingCount;
+    NSUInteger maxLoadCount;
+    
+    NSURL *currentURL;
+    
+    CGFloat currentLoadProgress;
+    
+    BOOL interactive;
+}
+@end
+
+
 @implementation CDVThemeableBrowserViewController
 
 @synthesize currentURL;
@@ -707,6 +730,9 @@
 #endif
         _navigationDelegate = navigationDelegate;
         _statusBarStyle = statusBarStyle;
+        maxLoadCount = loadingCount = 0;
+        currentLoadProgress = 99;
+        interactive = NO;
         [self createViews];
     }
     
@@ -940,6 +966,14 @@
     
     self.view.backgroundColor = [CDVThemeableBrowserViewController colorFromRGBA:[self getStringFromDict:_browserOptions.statusbar withKey:kThemeableBrowserPropColor withDefault:@"#ffffffff"]];
     [self.view addSubview:self.toolbar];
+    self.progressView=[[UIProgressView   alloc] initWithFrame:CGRectMake(0.0, toolbarY+toolbarHeight+[self getStatusBarOffset], self.view.bounds.size.width, 20.0)];
+    self.progressView.autoresizingMask = UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+    self.progressView.progressViewStyle=UIProgressViewStyleDefault;
+    self.progressView.progressTintColor=[CDVThemeableBrowserViewController colorFromRGBA:[self getStringFromDict:_browserOptions.browserProgress withKey: kThemeableBrowserPropProgressColor withDefault:@"#0000FF"]];
+    self.progressView.trackTintColor=[CDVThemeableBrowserViewController colorFromRGBA:[self getStringFromDict:_browserOptions.browserProgress withKey:kThemeableBrowserPropProgressBgColor withDefault:@"#808080"]];
+    if ([self getBoolFromDict:_browserOptions.browserProgress withKey:kThemeableBrowserPropShowProgress]) {
+        [self.view addSubview:self.progressView];
+    }
     // [self.view addSubview:self.addressLabel];
     // [self.view addSubview:self.spinner];
 }
@@ -1400,31 +1434,31 @@
 
 - (void) rePositionViews {
     // Webview height is a bug that appear in the plugin for ios >= 11 so we need to keep the previous code that work great for previous versions
-    if (@available(iOS 11, *)) {
+     if (@available(iOS 11, *)) {
         
-        CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
-        CGFloat statusBarOffset = [self getStatusBarOffset];
-        CGFloat webviewOffset = _browserOptions.fullscreen ? 0.0 : toolbarHeight + statusBarOffset;
+         CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
+         CGFloat statusBarOffset = [self getStatusBarOffset];
+         CGFloat webviewOffset = _browserOptions.fullscreen ? 0.0 : toolbarHeight + statusBarOffset;
         
-        if ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop]) {
-            // The webview height calculated did not take the status bar into account. Thus we need to remove status bar height to the webview height.
-            [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, (self.webView.frame.size.height-statusBarOffset))];
-            [self.toolbar setFrame:CGRectMake(self.toolbar.frame.origin.x, [self getStatusBarOffset], self.toolbar.frame.size.width, self.toolbar.frame.size.height)];
-        }
-        // When positionning the iphone to landscape mode, status bar is hidden. The problem is that we set the webview height just before with removing the status bar height. We need to adjust the phenomen by adding the preview status bar height. We had to add manually 20 (pixel) because in landscape mode, the status bar height is equal to 0.
-        if (statusBarOffset == 0) {
-            [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, (self.webView.frame.size.height+20))];
-        }
+         if ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop]) {
+             // The webview height calculated did not take the status bar into account. Thus we need to remove status bar height to the webview height.
+             [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, (self.view.bounds.size.height-webviewOffset))];
+             [self.toolbar setFrame:CGRectMake(self.toolbar.frame.origin.x, [self getStatusBarOffset], self.toolbar.frame.size.width, self.toolbar.frame.size.height)];
+         }
+         // When positionning the iphone to landscape mode, status bar is hidden. The problem is that we set the webview height just before with removing the status bar height. We need to adjust the phenomen by adding the preview status bar height. We had to add manually 20 (pixel) because in landscape mode, the status bar height is equal to 0.
+         if (statusBarOffset == 0) {
+             [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, (self.webView.frame.size.height+20))];
+         }
         
-        CGFloat screenWidth = CGRectGetWidth(self.view.frame);
-        NSInteger width = floorf(screenWidth - self.titleOffset * 2.0f);
-        if (self.titleLabel) {
-            self.titleLabel.frame = CGRectMake(floorf((screenWidth - width) / 2.0f), 0, width, toolbarHeight);
-        }
+         CGFloat screenWidth = CGRectGetWidth(self.view.frame);
+         NSInteger width = floorf(screenWidth - self.titleOffset * 2.0f);
+         if (self.titleLabel) {
+             self.titleLabel.frame = CGRectMake(floorf((screenWidth - width) / 2.0f), 0, width, toolbarHeight);
+         }
         
-        [self layoutButtons];
+         [self layoutButtons];
         
-    } else {
+     } else {
         
         CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
         CGFloat webviewOffset = _browserOptions.fullscreen ? 0.0 : toolbarHeight;
@@ -1441,7 +1475,7 @@
         }
         
         [self layoutButtons];
-    }
+     }
 }
 
 - (CGFloat) getFloatFromDict:(NSDictionary*)dict withKey:(NSString*)key withDefault:(CGFloat)def
@@ -1508,15 +1542,38 @@
     // loading url, start spinner
     
     self.addressLabel.text = NSLocalizedString(@"Loading...", nil);
+    loadingCount++;
+    maxLoadCount = fmax(maxLoadCount, loadingCount);
     
     [self.spinner startAnimating];
     
-    return [self.navigationDelegate webViewDidStartLoad:theWebView];
+//    return [self.navigationDelegate webViewDidStartLoad:theWebView];
+    [self.navigationDelegate webViewDidStartLoad:theWebView];
+    [self startProgress:theWebView];
 }
 
 - (BOOL)webView:(UIWebView*)theWebView shouldStartLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType
 {
-    BOOL isTopLevelNavigation = [request.URL isEqual:[request mainDocumentURL]];
+//    BOOL isTopLevelNavigation = [request.URL isEqual:[request mainDocumentURL]];
+    if ([request.URL.path isEqualToString:completeRPCURLPath]) {
+        [self completeProgress:theWebView];
+        return NO;
+    }
+    
+    BOOL ret = [self.navigationDelegate webView:theWebView shouldStartLoadWithRequest:request navigationType:navigationType];
+    BOOL isFragmentJump = NO;
+    if (request.URL.fragment) {
+        NSString *nonFragmentURL = [request.URL.absoluteString stringByReplacingOccurrencesOfString:[@"#" stringByAppendingString:request.URL.fragment] withString:@""];
+        isFragmentJump = [nonFragmentURL isEqualToString:theWebView.request.URL.absoluteString];
+    }
+    
+    BOOL isTopLevelNavigation = [request.mainDocumentURL isEqual:request.URL];
+    
+    BOOL isHTTP = [request.URL.scheme isEqualToString:@"http"] || [request.URL.scheme isEqualToString:@"https"];
+    if (ret && !isFragmentJump && isHTTP && isTopLevelNavigation) {
+        currentURL = request.URL;
+        [self reset:theWebView];
+    }
     
     if (isTopLevelNavigation) {
         self.currentURL = request.URL;
@@ -1524,7 +1581,8 @@
     
     [self updateButtonDelayed:theWebView];
     
-    return [self.navigationDelegate webView:theWebView shouldStartLoadWithRequest:request navigationType:navigationType];
+//    return [self.navigationDelegate webView:theWebView shouldStartLoadWithRequest:request navigationType:navigationType];
+    return ret;
 }
 
 - (void)webViewDidFinishLoad:(UIWebView*)theWebView
@@ -1561,6 +1619,25 @@
     }
     
     [self.navigationDelegate webViewDidFinishLoad:theWebView];
+    loadingCount--;
+    [self incrementProgress:theWebView];
+    
+    NSString *readyState = [theWebView stringByEvaluatingJavaScriptFromString:@"document.readyState"];
+    
+    BOOL tpInteractive = [readyState isEqualToString:@"interactive"];
+    if (tpInteractive)
+    {
+        interactive = YES;
+        NSString *waitForCompleteJS = [NSString stringWithFormat:@"window.addEventListener('load',function() { var iframe = document.createElement('iframe'); iframe.style.display = 'none'; iframe.src = '%@://%@%@'; document.body.appendChild(iframe);  }, false);", theWebView.request.mainDocumentURL.scheme, theWebView.request.mainDocumentURL.host, completeRPCURLPath];
+        [theWebView stringByEvaluatingJavaScriptFromString:waitForCompleteJS];
+    }
+    
+    BOOL isNotRedirect = currentURL && [currentURL isEqual:theWebView.request.mainDocumentURL];
+    BOOL complete = [readyState isEqualToString:@"complete"];
+    if (complete && isNotRedirect)
+    {
+        [self completeProgress:theWebView];
+    }
 }
 
 - (void)webView:(UIWebView*)theWebView didFailLoadWithError:(NSError*)error
@@ -1572,6 +1649,103 @@
     self.addressLabel.text = NSLocalizedString(@"Load Error", nil);
     
     [self.navigationDelegate webView:theWebView didFailLoadWithError:error];
+    loadingCount--;
+    [self incrementProgress:theWebView];
+    
+    NSString *readyState = [theWebView stringByEvaluatingJavaScriptFromString:@"document.readyState"];
+    
+    BOOL tpInteractive = [readyState isEqualToString:@"interactive"];
+    if (tpInteractive)
+    {
+        interactive = YES;
+        NSString *waitForCompleteJS = [NSString stringWithFormat:@"window.addEventListener('load',function() { var iframe = document.createElement('iframe'); iframe.style.display = 'none'; iframe.src = '%@://%@%@'; document.body.appendChild(iframe);  }, false);", theWebView.request.mainDocumentURL.scheme, theWebView.request.mainDocumentURL.host, completeRPCURLPath];
+        [theWebView stringByEvaluatingJavaScriptFromString:waitForCompleteJS];
+    }
+    
+    BOOL isNotRedirect = currentURL && [currentURL isEqual:theWebView.request.mainDocumentURL];
+    BOOL complete = [readyState isEqualToString:@"complete"];
+    if ((complete && isNotRedirect) || error)
+    {
+        [self completeProgress:theWebView];
+    }
+}
+
+-(void)setprogress:(CGFloat)progress webView:(UIWebView *)webView
+{
+    
+    if (progress == 0 && (currentLoadProgress == 1 || currentLoadProgress == 99))
+    {
+        currentLoadProgress = progress;
+        [self.progressView setProgress:progress animated:YES];
+        
+    }
+    else
+    {
+        if (progress > currentLoadProgress)
+        {
+            currentLoadProgress = progress;
+            [self.progressView setProgress:progress animated:YES];
+        }
+    }
+}
+
+- (void) hideAndResetProgress
+{
+    [self.progressView setHidden:YES];
+    [self.progressView setProgress:0 animated:NO];
+}
+
+- (void)reset:(UIWebView *)webView
+{
+    maxLoadCount = loadingCount = 0;
+    interactive = NO;
+    [self setprogress:0.0 webView:webView];
+}
+
+- (void)startProgress:(UIWebView *)webView
+{
+    if (currentLoadProgress < MyInitialProgressValue)
+    {
+        [self.progressView setHidden:NO];
+        [self setprogress:MyInitialProgressValue webView:webView];
+    }
+}
+
+/**
+ *
+ *  @param webView webView
+ */
+- (void)completeProgress:(UIWebView *)webView
+{
+    [self setprogress:1.0 webView:webView];
+    [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(hideAndResetProgress) userInfo:nil repeats:NO];
+}
+
+- (void)incrementProgress:(UIWebView *)webView
+{
+    float progress = currentLoadProgress;
+    float maxProgress = interactive ? MyFinalProgressValue : MyInteractiveProgressValue;
+    float remainPercent = (float)loadingCount / (float)maxLoadCount;
+    float increment = (maxProgress - progress) * remainPercent;
+    progress += increment;
+    progress = fmin(progress, maxProgress);
+    [self setprogress:progress webView:webView];
+}
+
+/**
+ *
+ *  @return currentProgress
+ */
+-(CGFloat)loadProgress
+{
+    if (currentLoadProgress == 99)
+    {
+        return 0;
+    }
+    else
+    {
+        return currentLoadProgress;
+    }
 }
 
 - (void)updateButton:(UIWebView*)theWebView
@@ -1730,4 +1904,3 @@
 
 
 @end
-
