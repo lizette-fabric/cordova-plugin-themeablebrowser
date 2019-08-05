@@ -872,9 +872,9 @@ public class ThemeableBrowser extends CordovaPlugin {
                             title.setText(inAppWebView.getTitle());
                         }
 
-                        if (back != null) {
-                            back.setEnabled(canGoBack || features.backButtonCanClose);
-                        }
+                        // if (back != null) {
+                        //     back.setEnabled(canGoBack || features.backButtonCanClose);
+                        // }
 
                         if (forward != null) {
                             forward.setEnabled(canGoForward);
