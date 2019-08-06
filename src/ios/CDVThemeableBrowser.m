@@ -1750,9 +1750,9 @@ const float MyFinalProgressValue = 0.9f;
 
 - (void)updateButton:(UIWebView*)theWebView
 {
-    // if (self.backButton) {
-    //     self.backButton.enabled = _browserOptions.backButtonCanClose || theWebView.canGoBack;
-    // }
+    if (self.backButton) {
+        self.backButton.enabled = YES;
+    }
     
     if (self.forwardButton) {
         self.forwardButton.enabled = theWebView.canGoForward;

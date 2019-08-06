@@ -504,6 +504,10 @@ public class ThemeableBrowser extends CordovaPlugin {
         }
     }
 
+    public void hardwareBack() {
+        emitLog("hardwareBack", "", "");
+    }
+
     /**
      * Can the web browser go back?
      * @return boolean
@@ -872,9 +876,9 @@ public class ThemeableBrowser extends CordovaPlugin {
                             title.setText(inAppWebView.getTitle());
                         }
 
-                        // if (back != null) {
-                        //     back.setEnabled(canGoBack || features.backButtonCanClose);
-                        // }
+                        if (back != null) {
+                            back.setEnabled(true);
+                        }
 
                         if (forward != null) {
                             forward.setEnabled(canGoForward);
