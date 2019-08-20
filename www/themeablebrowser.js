@@ -25,6 +25,7 @@ var modulemapper = require('cordova/modulemapper');
 var urlutil = require('cordova/urlutil');
 
 function ThemeableBrowser() {
+   this._isShown = false;
    this.channels = {
        'loadstart': channel.create('loadstart'),
        'loadstop' : channel.create('loadstop'),
@@ -42,18 +43,24 @@ ThemeableBrowser.prototype = {
     },
     close: function (eventname) {
         exec(null, null, 'ThemeableBrowser', 'close', []);
+        this._isShown = false;
         return this;
     },
     show: function (eventname) {
         exec(null, null, 'ThemeableBrowser', 'show', []);
+        this._isShown = true;
         return this;
     },
     hide: function (eventname) {
         exec(null, null, "ThemeableBrowser", "hide", []);
+        this._isShown = false;
     },
     reload: function (eventname) {
         exec(null, null, 'ThemeableBrowser', 'reload', []);
         return this;
+    },
+    isShown: function () {
+        return this._isShown;
     },
     addEventListener: function (eventname,f) {
         if (!(eventname in this.channels)) {
@@ -116,6 +123,7 @@ exports.open = function(strUrl, strWindowName, strWindowFeatures, callbacks) {
     // register event listeners first, otherwise some warnings or errors may be missed.
     setTimeout(function() {
         exec(cb, cb, 'ThemeableBrowser', 'open', [strUrl, strWindowName, strWindowFeatures || '']);
+        iab._isShown = true;
     }, 0);
     return iab;
 };
