@@ -358,7 +358,7 @@ const float MyFinalProgressValue = 0.9f;
             
             
             [strongSelf->tmpWindow makeKeyAndVisible];
-            [tmpController presentViewController:nav animated:YES completion:nil];
+            [tmpController presentViewController:nav animated:NO completion:nil];
         }
     });
 }
@@ -376,7 +376,9 @@ const float MyFinalProgressValue = 0.9f;
     }
     */
     if (self.themeableBrowserViewController != nil) {
-        [[self.themeableBrowserViewController presentingViewController] dismissViewControllerAnimated:NO completion:nil];
+    	[[self.themeableBrowserViewController presentingViewController] dismissViewControllerAnimated:NO completion:nil];
+        CDVThemeableBrowser* navigationDelegate = self.themeableBrowserViewController.navigationDelegate;
+        [navigationDelegate nilTmpWindow];
         _isShown = NO;
         /*_previousStatusBarStyle = -1;*/
     }
