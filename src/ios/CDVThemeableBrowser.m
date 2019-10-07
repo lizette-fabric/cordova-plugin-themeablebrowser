@@ -338,16 +338,26 @@ const float MyFinalProgressValue = 0.9f;
                                                     initWithRootViewController:self.themeableBrowserViewController];
     nav.orientationDelegate = self.themeableBrowserViewController;
     nav.navigationBarHidden = YES;
+    if (@available(iOS 13.0, *)) {
+        nav.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    }
+    
+    __weak CDVThemeableBrowser* weakSelf = self;
+    
     // Run later to avoid the "took a long time" log message.
     dispatch_async(dispatch_get_main_queue(), ^{
         if (self.themeableBrowserViewController != nil) {
-            CGRect frame = [[UIScreen mainScreen] bounds];
-            UIWindow *tmpWindow = [[UIWindow alloc] initWithFrame:frame];
-            UIViewController *tmpController = [[UIViewController alloc] init];
-            [tmpWindow setRootViewController:tmpController];
-            [tmpWindow setWindowLevel:UIWindowLevelNormal];
+            __strong __typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf->tmpWindow) {
+                CGRect frame = [[UIScreen mainScreen] bounds];
+                strongSelf->tmpWindow = [[UIWindow alloc] initWithFrame:frame];
+            }
             
-            [tmpWindow makeKeyAndVisible];
+            UIViewController *tmpController = [[UIViewController alloc] init];
+            [strongSelf->tmpWindow setRootViewController:tmpController];
+            
+            
+            [strongSelf->tmpWindow makeKeyAndVisible];
             [tmpController presentViewController:nav animated:NO completion:nil];
         }
     });
@@ -366,7 +376,9 @@ const float MyFinalProgressValue = 0.9f;
     }
     */
     if (self.themeableBrowserViewController != nil) {
-        [[self.themeableBrowserViewController presentingViewController] dismissViewControllerAnimated:NO completion:nil];
+    	[[self.themeableBrowserViewController presentingViewController] dismissViewControllerAnimated:NO completion:nil];
+        CDVThemeableBrowser* navigationDelegate = self.themeableBrowserViewController.navigationDelegate;
+        [navigationDelegate nilTmpWindow];
         _isShown = NO;
         /*_previousStatusBarStyle = -1;*/
     }
@@ -641,6 +653,17 @@ const float MyFinalProgressValue = 0.9f;
     }
 }
 
+- (UIWindow*)getTmpWindow
+{
+    // Set tmpWindow to hidden to make main webview responsive to touch again
+    // Based on https://stackoverflow.com/questions/4544489/how-to-remove-a-uiwindow
+    return self->tmpWindow;
+}
+
+- (void) nilTmpWindow{
+    self->tmpWindow = nil;
+}
+
 - (void)browserExit
 {
     if (self.callbackId != nil) {
@@ -654,6 +677,8 @@ const float MyFinalProgressValue = 0.9f;
     // Don't recycle the ViewController since it may be consuming a lot of memory.
     // Also - this is required for the PDF/User-Agent bug work-around.
     self.themeableBrowserViewController = nil;
+    
+    
     self.callbackId = nil;
     self.callbackIdPattern = nil;
     
@@ -1273,19 +1298,24 @@ const float MyFinalProgressValue = 0.9f;
     [CDVUserAgentUtil releaseLock:&_userAgentLockToken];
     self.currentURL = nil;
     self.webView.delegate = nil;
-    
-    if ((self.navigationDelegate != nil) && [self.navigationDelegate respondsToSelector:@selector(browserExit)]) {
-        [self.navigationDelegate browserExit];
-    }
+    CDVThemeableBrowser* navigationDelegate = self.navigationDelegate;
     
     // Run later to avoid the "took a long time" log message.
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([self respondsToSelector:@selector(presentingViewController)]) {
-            [[self presentingViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:nil];
+            [[self presentingViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:^{
+                [navigationDelegate nilTmpWindow];
+            }];
         } else {
-            [[self parentViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:nil];
+            [[self parentViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:^{
+                [navigationDelegate nilTmpWindow];
+            }];
         }
     });
+    
+    if ((self.navigationDelegate != nil) && [self.navigationDelegate respondsToSelector:@selector(browserExit)]) {
+        [self.navigationDelegate browserExit];
+    }
     
 }
 
